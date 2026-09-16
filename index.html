@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <title>Malayalam Voice to Text</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+        }
+        .result-box {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+            min-height: 100px;
+            white-space: pre-wrap;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 10px auto;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 10px 0;
+        }
+        .instructions {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .formats {
+            background: #e3f2fd;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            background: #e9ecef;
+            cursor: pointer;
+            border: 1px solid #dee2e6;
+        }
+        .tab.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .record-button {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: #dc3545;
+            color: white;
+            border: none;
+            margin: 20px auto;
+            display: block;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .record-button.recording {
+            animation: pulse 1.5s infinite;
+        }
+        .timer {
+            text-align: center;
+            font-size: 1.2em;
+            margin: 10px 0;
+            display: none;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .audio-controls {
+            text-align: center;
+            margin: 15px 0;
+            display: none;
+        }
+        #audioPlayback {
+            width: 100%;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Malayalam Voice to Text</h1>
+        
+        <div class="instructions">
+            <h2>Instructions</h2>
+            <ol>
+                <li>Choose to either record directly or upload an existing audio file</li>
+                <li>For recording: Click the record button and speak in Malayalam</li>
+                <li>For uploading: Select your audio file</li>
+                <li>Click transcribe to convert your speech to text</li>
+            </ol>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('record')">Record Audio</div>
+            <div class="tab" onclick="switchTab('upload')">Upload Audio</div>
+        </div>
+
+        <div id="recordTab" class="tab-content active">
+            <button id="recordButton" class="record-button">
+                Start Recording
+            </button>
+            <div id="timer" class="timer">00:00</div>
+            <div class="audio-controls" id="audioControls">
+                <audio id="audioPlayback" controls></audio>
+                <button onclick="transcribeRecording()" id="transcribeRecordingBtn" disabled>Transcribe Recording</button>
+            </div>
+        </div>
+
+        <div id="uploadTab" class="tab-content">
+            <div class="formats">
+                <strong>Supported Audio Formats:</strong>
+                <ul>
+                    <li>MP3 (recommended for best quality)</li>
+                    <li>WAV</li>
+                    <li>M4A / AAC</li>
+                    <li>FLAC</li>
+                    <li>OGG</li>
+                    <li>WMA</li>
+                    <li>And most other common audio formats</li>
+                </ul>
+                <p><small>Note: For best results, ensure your recording is clear and has minimal background noise.</small></p>
+            </div>
+
+            <form id="transcriptionForm">
+                <label for="audio">Select your Malayalam audio file:</label><br>
+                <input type="file" id="audio" name="audio" accept="audio/*" required><br>
+                <button type="submit">Upload & Transcribe</button>
+            </form>
+        </div>
+
+        <div id="error" class="error"></div>
+        <div id="transcriptionLoading" class="loading">
+            Transcribing your audio... Please wait...<br>
+            <small>(This may take a few moments depending on the file size)</small>
+        </div>
+        <div id="transcriptionResult" class="result-box"></div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let recordingTimer;
+        let startTime;
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            if (tabName === 'record') {
+                document.querySelector('.tab:first-child').classList.add('active');
+                document.getElementById('recordTab').classList.add('active');
+            } else {
+                document.querySelector('.tab:last-child').classList.add('active');
+                document.getElementById('uploadTab').classList.add('active');
+            }
+        }
+
+        function updateTimer() {
+            const now = new Date();
+            const diff = now - startTime;
+            const minutes = Math.floor(diff / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            document.getElementById('timer').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        document.getElementById('recordButton').addEventListener('click', async () => {
+            const button = document.getElementById('recordButton');
+            const timer = document.getElementById('timer');
+            const audioControls = document.getElementById('audioControls');
+
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                // Start recording
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        const audio = document.getElementById('audioPlayback');
+                        audio.src = audioUrl;
+                        audioControls.style.display = 'block';
+                        document.getElementById('transcribeRecordingBtn').disabled = false;
+                    };
+
+                    mediaRecorder.start();
+                    button.textContent = 'Stop Recording';
+                    button.classList.add('recording');
+                    timer.style.display = 'block';
+                    startTime = new Date();
+                    recordingTimer = setInterval(updateTimer, 1000);
+
+                } catch (error) {
+                    console.error('Error accessing microphone:', error);
+                    document.getElementById('error').textContent = 'Error accessing microphone. Please ensure you have given permission to use the microphone.';
+                    document.getElementById('error').style.display = 'block';
+                }
+            } else {
+                // Stop recording
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                button.textContent = 'Start Recording';
+                button.classList.remove('recording');
+                clearInterval(recordingTimer);
+            }
+        });
+
+        async function transcribeRecording() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.wav');
+
+            document.getElementById('transcriptionLoading').style.display = 'block';
+            document.getElementById('transcriptionResult').textContent = '';
+            document.getElementById('error').style.display = 'none';
+
+            try {
+                const response = await fetch('/transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                document.getElementById('transcriptionResult').textContent = data.transcript;
+            } catch (error) {
+                document.getElementById('error').textContent = `Error: ${error.message}`;
+                document.getElementById('error').style.display = 'block';
+            } finally {
+                document.getElementById('transcriptionLoading').style.display = 'none';
+            }
+        }
+
+        document.getElementById('transcriptionForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            const audioFile = document.getElementById('audio').files[0];
+            const errorDiv = document.getElementById('error');
+            
+            // Reset displays
+            errorDiv.style.display = 'none';
+            document.getElementById('transcriptionResult').textContent = '';
+            
+            // Check file size (max 25MB)
+            if (audioFile.size > 25 * 1024 * 1024) {
+                errorDiv.textContent = 'File size too large. Please upload an audio file smaller than 25MB.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            formData.append('audio', audioFile);
+            document.getElementById('transcriptionLoading').style.display = 'block';
+
+            try {
+                const response = await fetch('/transcribe', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                document.getElementById('transcriptionResult').textContent = data.transcript;
+            } catch (error) {
+                errorDiv.textContent = `Error: ${error.message}`;
+                errorDiv.style.display = 'block';
+            } finally {
+                document.getElementById('transcriptionLoading').style.display = 'none';
+            }
+        };
+    </script>
+</body>
+</html> 
